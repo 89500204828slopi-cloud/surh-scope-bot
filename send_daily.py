@@ -1,101 +1,68 @@
-import asyncio
 import json
 import os
-from datetime import date
-from typing import Dict, Any
-
+from datetime import datetime
 from aiogram import Bot
-from dotenv import load_dotenv
+
+# Загружаем токен
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+bot = Bot(token=BOT_TOKEN)
 
 USERS_FILE = "users.json"
-HOROS_FILE = "horoscopes.json"
 
-
-def load_json(path: str) -> Dict[str, Any]:
-    if not os.path.exists(path):
+# Читаем всех юзеров
+def load_users():
+    if not os.path.exists(USERS_FILE):
         return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-
-def save_json(path: str, data: Dict[str, Any]) -> None:
-    with open(path, "w", encoding="utf-8") as f:
+def save_users(data):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# Загружаем гороскопы
+import json
+with open("horoscopes.json", "r", encoding="utf-8") as f:
+    HOROS = json.load(f)
+
+today = datetime.now().date().isoformat()
+users = load_users()
 
 async def main():
-    load_dotenv()
-    bot_token = os.getenv("BOT_TOKEN")
-    if not bot_token:
-        raise RuntimeError("Не найден BOT_TOKEN в .env")
+    for uid, data in users.items():
+        zodiac = data.get("zodiac")
+        mode = data.get("mode", "classic")
 
-    bot = Bot(token=bot_token)
-
-    users = load_json(USERS_FILE)
-    horoscopes = load_json(HOROS_FILE)
-
-    today = date.today()
-    today_key = today.isoformat()
-
-    day_block = horoscopes.get(today_key)
-    if not day_block:
-        # нет гороскопов на сегодня — ничего не делаем
-        await bot.session.close()
-        return
-
-    changed = False
-
-    for uid, udata in users.items():
-        zodiac = udata.get("zodiac")
-        style = udata.get("style")
-        last_sent = udata.get("last_sent_date")
-
-        if not zodiac or not style:
+        # Не отправлять если гороскоп уже получен сегодня вручную
+        if data.get("last_received_date") == today:
             continue
 
-        # уже отправляли сегодня
-        if last_sent == today_key:
+        # Не отправлять если пуш уже отправлялся сегодня
+        if data.get("last_sent_push") == today:
             continue
 
-        sign_block = day_block.get(zodiac)
-        if not sign_block:
+        # Проверяем, есть ли гороскоп на сегодня
+        if today not in HOROS:
             continue
 
-        text = sign_block.get(style)
-        if not text or text.strip() == "":
+        if zodiac not in HOROS[today]:
             continue
 
-        msg_text = f"🌀 Твой сюр-гороскоп на сегодня:\n\n{text}"
+        horoscope_text = HOROS[today][zodiac][mode]
 
         try:
-            await bot.send_message(int(uid), msg_text)
-            udata["last_sent_date"] = today_key
-            changed = True
-        except Exception:
-            # заблокировал бота или другая ошибка — пропускаем
-            continue
+            await bot.send_message(
+                int(uid),
+                f"🔮 Твой новый сюр-гороскоп готов!\n\n{horoscope_text}"
+            )
+            # помечаем, что пуш отправлен
+            data["last_sent_push"] = today
 
-    if changed:
-        save_json(USERS_FILE, users)
+        except Exception as e:
+            print(f"Не удалось отправить {uid}: {e}")
 
-    # Очистка старых дат в horoscopes.json
-    cleaned = {}
-    for dkey, block in horoscopes.items():
-        try:
-            d_date = date.fromisoformat(dkey)
-        except ValueError:
-            continue
-        # оставляем только сегодняшнюю и будущие
-        if d_date >= today:
-            cleaned[dkey] = block
-
-    save_json(HOROS_FILE, cleaned)
-
-    await bot.session.close()
-
+    save_users(users)
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
