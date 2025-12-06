@@ -102,21 +102,12 @@ def load_horoscopes() -> Dict[str, Any]:
 # Клавиатуры
 # ---------------------------------------------------------
 
-def main_reply_keyboard(user_id: int) -> ReplyKeyboardMarkup:
-    """
-    Формируем клавиатуру. Если пользователь — админ, добавляем кнопку Админ.
-    """
-    rows = [
-        [KeyboardButton(text="📜 Гороскоп на сегодня")],
-        [KeyboardButton(text="⚙ Настройки")],
-    ]
-
-    if user_id == OWNER_ID:
-        rows.append([KeyboardButton(text="🔧 Админ-панель")])
-
-    return ReplyKeyboardMarkup(
-        keyboard=rows,
-        resize_keyboard=True,
+def main_menu_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🌟 Гороскоп на сегодня", callback_data="today_horoscope")],
+            [InlineKeyboardButton(text="🔧 Админ-панель", callback_data="admin_menu")]
+        ]
     )
 
 def zodiac_inline_keyboard() -> InlineKeyboardMarkup:
@@ -281,10 +272,16 @@ async def send_today_horoscope(message: Message):
 async def cmd_today(message: Message):
     await send_today_horoscope(message)
 
-
 @dp.message(F.text == "📜 Гороскоп на сегодня")
 async def msg_today_button(message: Message):
     await send_today_horoscope(message)
+
+
+@dp.callback_query(F.data == "today_horoscope")
+async def cb_today_horoscope(query: CallbackQuery):
+    await send_today_horoscope(query.message)
+    await query.answer()
+
 # ---------------------------------------------------------
 # Админ-панель — клавиатуры и вспомогательные функции
 # ---------------------------------------------------------
