@@ -274,6 +274,7 @@ async def cmd_today(message: Message):
 
 @dp.message(F.text.contains("Гороскоп на сегодня"))
 async def msg_today_button(message: Message):
+    print("DEBUG: reply button pressed")
     await send_today_horoscope(message)
 
 
