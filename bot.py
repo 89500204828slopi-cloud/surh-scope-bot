@@ -374,7 +374,7 @@ async def stats_cmd(message: Message):
 
     await message.answer(text, parse_mode="HTML")
     def admin_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
+        return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📊 Статистика", callback_data="admin:stats")],
             [InlineKeyboardButton(text="👥 Список пользователей", callback_data="admin:users")],
