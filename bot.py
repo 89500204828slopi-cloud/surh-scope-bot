@@ -147,6 +147,27 @@ def settings_inline_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
+def main_reply_keyboard(user_id: int) -> ReplyKeyboardMarkup:
+    """
+    Основное меню внизу:
+    - 🌟 Гороскоп на сегодня
+    - ⚙ Настройки
+    - 🔧 Админ-панель (только для OWNER_ID)
+    """
+    keyboard = [
+        [KeyboardButton(text="🌟 Гороскоп на сегодня")],
+        [KeyboardButton(text="⚙ Настройки")],
+    ]
+
+    if user_id == OWNER_ID:
+        keyboard.append([KeyboardButton(text="🔧 Админ-панель")])
+
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
 # ---------------------------------------------------------
 # Команда /start
 # ---------------------------------------------------------
@@ -239,6 +260,63 @@ async def cb_settings_change_style(query: CallbackQuery):
 
 
 # ---------------------------------------------------------
+# Получение гороскопа из файла
+# ---------------------------------------------------------
+
+def get_today_horoscope(zodiac: str, style: str, day: date) -> Optional[str]:
+    """
+    Пытаемся достать текст гороскопа на day для заданных знака и стиля
+    из horoscopes.json.
+
+    Ожидаем структуру примерно вида:
+    {
+      "2025-12-06": {
+        "aries": {
+          "classic": "текст...",
+          "uncensored": "текст..."
+        },
+        "taurus": { ... }
+      }
+    }
+    """
+    data = load_horoscopes()
+    if not data:
+        return None
+
+    key = day.isoformat()
+    day_block = data.get(key)
+    if not day_block:
+        # на всякий случай попробуем ещё ключ без нулей или другие варианты,
+        # если ты потом захочешь доработать формат
+        return None
+
+    zodiac_block = day_block.get(zodiac)
+    if not zodiac_block:
+        return None
+
+    # Если храним по стилям
+    if isinstance(zodiac_block, dict):
+        # строго по стилю
+        text = zodiac_block.get(style)
+        if text:
+            return text
+        # fallback — просто "text" или любой один общий
+        if "text" in zodiac_block:
+            return zodiac_block["text"]
+        # на всякий случай возьмём первый попавшийся
+        for v in zodiac_block.values():
+            if isinstance(v, str) and v.strip():
+                return v
+        return None
+
+    # Если храним сразу строкой
+    if isinstance(zodiac_block, str):
+        return zodiac_block
+
+    return None
+
+
+# ---------------------------------------------------------
 # Гороскоп на сегодня
 # ---------------------------------------------------------
 
@@ -271,6 +349,7 @@ async def send_today_horoscope(message: Message):
 @dp.message(Command("today"))
 async def cmd_today(message: Message):
     await send_today_horoscope(message)
+
 
 @dp.message(F.text.contains("Гороскоп на сегодня"))
 async def msg_today_button(message: Message):
@@ -492,6 +571,7 @@ async def broadcast_handler(message: Message):
 
     await message.answer(f"Готово! Отправлено {count} пользователям.")
     del bot.broadcast_mode
+
 # ---------------------------------------------------------
 # /stats — быстрая статистика для админа (без панели)
 # ---------------------------------------------------------
