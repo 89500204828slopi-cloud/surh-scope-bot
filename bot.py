@@ -375,6 +375,48 @@ async def msg_today_button(message: Message):
 async def main():
     await dp.start_polling(bot)
 
+@dp.message(Command("stats"))
+async def stats_cmd(message):
+    # Доступ только владельцу
+    if message.from_user.id != OWNER_ID:
+        return await message.answer("Эта команда недоступна.")
 
+    # Загружаем данные
+    if not os.path.exists("users.json"):
+        return await message.answer("users.json отсутствует.")
+
+    with open("users.json", "r", encoding="utf-8") as f:
+        users = json.load(f)
+
+    total_users = len(users)
+
+    classic_count = sum(1 for u in users.values() if u.get("type") == "classic")
+    uncensored_count = sum(1 for u in users.values() if u.get("type") == "uncensored")
+
+    # сколько уже получило гороскоп сегодня
+    today = datetime.now().strftime("%Y-%m-%d")
+    received_today = sum(1 for u in users.values() if u.get("last_sent_date") == today)
+
+    # статистика по знакам
+    sign_stats = {}
+    for u in users.values():
+        sign = u.get("sign")
+        if sign:
+            sign_stats[sign] = sign_stats.get(sign, 0) + 1
+
+    # Формируем текст
+    sign_lines = "\n".join([f"• {sign}: {count}" for sign, count in sign_stats.items()]) or "Нет данных"
+
+    text = (
+        f"📊 <b>Статистика бота</b>\n\n"
+        f"👥 Всего пользователей: <b>{total_users}</b>\n"
+        f"🌗 Classic: <b>{classic_count}</b>\n"
+        f"🔥 Uncensored: <b>{uncensored_count}</b>\n"
+        f"📬 Получили гороскоп сегодня: <b>{received_today}</b>\n\n"
+        f"♈ Пользователи по знакам:\n{sign_lines}"
+    )
+
+    await message.answer(text)
+    
 if __name__ == "__main__":
     asyncio.run(main())
