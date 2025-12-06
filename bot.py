@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from datetime import date
+from datetime import date, datetime
 from typing import Dict, Any, Optional
 
 from aiogram import Bot, Dispatcher, F
@@ -23,6 +23,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))  # ← Твой ID берётся из .env
+
 if not BOT_TOKEN:
     raise RuntimeError("Не найден BOT_TOKEN в .env")
 
@@ -74,7 +76,6 @@ def load_json(path: str) -> Dict[str, Any]:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        # если файл битый — не ломаем бота
         return {}
 
 
@@ -86,25 +87,25 @@ def save_json(path: str, data: Dict[str, Any]) -> None:
 def get_or_create_user(user_id: int) -> Dict[str, Any]:
     users = load_json(USERS_FILE)
     uid = str(user_id)
+
     if uid not in users:
         users[uid] = {
             "zodiac": None,
-            "style": None,          # "classic" | "uncensored"
-            "last_sent_date": None  # "YYYY-MM-DD"
+            "style": None,
+            "last_sent_date": None
         }
         save_json(USERS_FILE, users)
+
     return users[uid]
 
 
 def update_user(user_id: int, **fields) -> None:
     users = load_json(USERS_FILE)
     uid = str(user_id)
+
     if uid not in users:
-        users[uid] = {
-            "zodiac": None,
-            "style": None,
-            "last_sent_date": None,
-        }
+        users[uid] = {"zodiac": None, "style": None, "last_sent_date": None}
+
     users[uid].update(fields)
     save_json(USERS_FILE, users)
 
@@ -124,13 +125,12 @@ def main_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="⚙ Настройки")],
         ],
         resize_keyboard=True,
-        one_time_keyboard=False,
     )
 
 
 def zodiac_inline_keyboard() -> InlineKeyboardMarkup:
-    rows = []
-    row = []
+    rows, row = [], []
+
     for i, z in enumerate(ZODIAC_ORDER, start=1):
         row.append(
             InlineKeyboardButton(
@@ -141,8 +141,10 @@ def zodiac_inline_keyboard() -> InlineKeyboardMarkup:
         if i % 3 == 0:
             rows.append(row)
             row = []
+
     if row:
         rows.append(row)
+
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -150,12 +152,8 @@ def style_inline_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text="Классический", callback_data="set_style:classic"
-                ),
-                InlineKeyboardButton(
-                    text="Без цензуры", callback_data="set_style:uncensored"
-                ),
+                InlineKeyboardButton(text="Классический", callback_data="set_style:classic"),
+                InlineKeyboardButton(text="Без цензуры", callback_data="set_style:uncensored"),
             ]
         ]
     )
@@ -164,27 +162,17 @@ def style_inline_keyboard() -> InlineKeyboardMarkup:
 def settings_inline_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="♈ Сменить знак зодиака", callback_data="settings:change_zodiac"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🎭 Сменить тип гороскопа", callback_data="settings:change_style"
-                )
-            ],
+            [InlineKeyboardButton(text="♈ Сменить знак зодиака", callback_data="settings:change_zodiac")],
+            [InlineKeyboardButton(text="🎭 Сменить тип гороскопа", callback_data="settings:change_style")],
         ]
     )
 
 
 # ---------------------------------------------------------
-# Логика получения гороскопа
+# Логика гороскопа
 # ---------------------------------------------------------
 
-def get_today_horoscope(
-    zodiac: str, style: str, today: Optional[date] = None
-) -> Optional[str]:
+def get_today_horoscope(zodiac: str, style: str, today: Optional[date] = None) -> Optional[str]:
     if today is None:
         today = date.today()
 
@@ -200,10 +188,7 @@ def get_today_horoscope(
         return None
 
     text = sign_block.get(style)
-    if not text:
-        return None
-
-    if text.strip() == "":
+    if not text or not text.strip():
         return None
 
     return text
@@ -215,16 +200,15 @@ def get_today_horoscope(
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    user = get_or_create_user(message.from_user.id)
+    get_or_create_user(message.from_user.id)
 
-    text = (
-        "🌀 Добро пожаловать в сюр-гороскопы.\n\n"
-        "Сейчас выберем твой знак, потом стиль — классический или без цензуры.\n"
-        "А дальше — каждый день свежий прогноз с лёгким налётом безумия."
+    txt = (
+        "🌀 Добро пожаловать в сюр-гороскопы!\n\n"
+        "Сначала выбери знак, затем стиль — классический или без цензуры."
     )
 
-    await message.answer(text)
-    await message.answer("Сначала выбери свой знак зодиака:", reply_markup=zodiac_inline_keyboard())
+    await message.answer(txt)
+    await message.answer("Выбери свой знак:", reply_markup=zodiac_inline_keyboard())
 
 
 # ---------------------------------------------------------
@@ -234,15 +218,11 @@ async def cmd_start(message: Message):
 @dp.callback_query(F.data.startswith("set_zodiac:"))
 async def cb_set_zodiac(query: CallbackQuery):
     zodiac = query.data.split(":", 1)[1]
-    if zodiac not in ZODIAC_LABELS:
-        await query.answer("Неизвестный знак.")
-        return
 
     update_user(query.from_user.id, zodiac=zodiac)
 
     await query.message.answer(
-        f"Знак зодиака установлен: {ZODIAC_LABELS[zodiac]}.\n\n"
-        "Теперь выбери стиль гороскопа:",
+        f"Знак установлен: {ZODIAC_LABELS[zodiac]}.\nТеперь выбери стиль:",
         reply_markup=style_inline_keyboard(),
     )
     await query.answer()
@@ -255,16 +235,13 @@ async def cb_set_zodiac(query: CallbackQuery):
 @dp.callback_query(F.data.startswith("set_style:"))
 async def cb_set_style(query: CallbackQuery):
     style = query.data.split(":", 1)[1]
-    if style not in ("classic", "uncensored"):
-        await query.answer("Неизвестный стиль.")
-        return
 
     update_user(query.from_user.id, style=style)
 
     style_label = "классический" if style == "classic" else "без цензуры"
+
     await query.message.answer(
-        f"Стиль гороскопа установлен: {style_label}.\n\n"
-        "Теперь можно получать ежедневный сюр-прогноз.",
+        f"Стиль установлен: {style_label}.",
         reply_markup=main_reply_keyboard(),
     )
     await query.answer()
@@ -278,22 +255,15 @@ async def cb_set_style(query: CallbackQuery):
 async def cmd_settings(message: Message):
     user = get_or_create_user(message.from_user.id)
 
-    zodiac = user.get("zodiac")
-    style = user.get("style")
-
-    zodiac_txt = ZODIAC_LABELS.get(zodiac, "не выбран")
-    if style == "classic":
-        style_txt = "классический"
-    elif style == "uncensored":
-        style_txt = "без цензуры"
-    else:
-        style_txt = "не выбран"
+    zodiac_txt = ZODIAC_LABELS.get(user.get("zodiac"), "не выбран")
+    style_txt = {"classic": "классический", "uncensored": "без цензуры"}.get(
+        user.get("style"), "не выбран"
+    )
 
     text = (
         "⚙ Текущие настройки:\n"
         f"• Знак: {zodiac_txt}\n"
-        f"• Стиль: {style_txt}\n\n"
-        "Что хочешь изменить?"
+        f"• Стиль: {style_txt}\n"
     )
 
     await message.answer(text, reply_markup=settings_inline_keyboard())
@@ -306,54 +276,43 @@ async def msg_settings_button(message: Message):
 
 @dp.callback_query(F.data == "settings:change_zodiac")
 async def cb_settings_change_zodiac(query: CallbackQuery):
-    await query.message.answer(
-        "Выбери новый знак зодиака:", reply_markup=zodiac_inline_keyboard()
-    )
+    await query.message.answer("Выбери новый знак:", reply_markup=zodiac_inline_keyboard())
     await query.answer()
 
 
 @dp.callback_query(F.data == "settings:change_style")
 async def cb_settings_change_style(query: CallbackQuery):
-    await query.message.answer(
-        "Выбери новый тип гороскопа:", reply_markup=style_inline_keyboard()
-    )
+    await query.message.answer("Выбери стиль:", reply_markup=style_inline_keyboard())
     await query.answer()
 
 
 # ---------------------------------------------------------
-# Гороскоп на сегодня (кнопка + команда)
+# Гороскоп на сегодня
 # ---------------------------------------------------------
 
 async def send_today_horoscope(message: Message):
     user = get_or_create_user(message.from_user.id)
+
     zodiac = user.get("zodiac")
     style = user.get("style")
 
     if not zodiac or not style:
-        await message.answer(
-            "Сначала нужно выбрать знак и стиль.\n"
-            "Нажми /start, чтобы пройти настройку заново."
-        )
-        return
+        return await message.answer("Сначала выбери знак и стиль (/start).")
 
     today = date.today()
     text = get_today_horoscope(zodiac, style, today)
 
     if not text:
-        await message.answer(
-            "Сегодняшний гороскоп ещё в процессе вызревания.\n"
-            "Загляни позже или на следующей неделе."
-        )
-        return
-
-    zodiac_label = ZODIAC_LABELS.get(zodiac, "")
-    style_label = "классический" if style == "classic" else "без цензуры"
+        return await message.answer("Гороскоп на сегодня ещё не готов.")
 
     reply = (
         f"🌀 Сюр-гороскоп на сегодня\n"
-        f"{zodiac_label} · {style_label}\n\n"
+        f"{ZODIAC_LABELS[zodiac]} · {('классический' if style == 'classic' else 'без цензуры')}\n\n"
         f"{text}"
     )
+
+    # отмечаем получение гороскопа
+    update_user(message.from_user.id, last_sent_date=today.isoformat())
 
     await message.answer(reply)
 
@@ -369,43 +328,40 @@ async def msg_today_button(message: Message):
 
 
 # ---------------------------------------------------------
-# Запуск
+# 📊 Статистика
 # ---------------------------------------------------------
 
-async def main():
-    await dp.start_polling(bot)
-
 @dp.message(Command("stats"))
-async def stats_cmd(message):
-    # Доступ только владельцу
-    if message.from_user.id != OWNER_ID:
-        return await message.answer("Эта команда недоступна.")
+async def stats_cmd(message: Message):
 
-    # Загружаем данные
-    if not os.path.exists("users.json"):
+    if message.from_user.id != OWNER_ID:
+        return await message.answer("Эта команда доступна только администратору.")
+
+    if not os.path.exists(USERS_FILE):
         return await message.answer("users.json отсутствует.")
 
-    with open("users.json", "r", encoding="utf-8") as f:
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
         users = json.load(f)
 
     total_users = len(users)
 
-    classic_count = sum(1 for u in users.values() if u.get("type") == "classic")
-    uncensored_count = sum(1 for u in users.values() if u.get("type") == "uncensored")
+    classic_count = sum(1 for u in users.values() if u.get("style") == "classic")
+    uncensored_count = sum(1 for u in users.values() if u.get("style") == "uncensored")
 
-    # сколько уже получило гороскоп сегодня
     today = datetime.now().strftime("%Y-%m-%d")
     received_today = sum(1 for u in users.values() if u.get("last_sent_date") == today)
 
     # статистика по знакам
     sign_stats = {}
     for u in users.values():
-        sign = u.get("sign")
+        sign = u.get("zodiac")
         if sign:
             sign_stats[sign] = sign_stats.get(sign, 0) + 1
 
-    # Формируем текст
-    sign_lines = "\n".join([f"• {sign}: {count}" for sign, count in sign_stats.items()]) or "Нет данных"
+    sign_lines = "\n".join(
+        f"• {ZODIAC_LABELS.get(sign, sign)}: {count}"
+        for sign, count in sign_stats.items()
+    ) or "Нет данных"
 
     text = (
         f"📊 <b>Статистика бота</b>\n\n"
@@ -416,7 +372,151 @@ async def stats_cmd(message):
         f"♈ Пользователи по знакам:\n{sign_lines}"
     )
 
-    await message.answer(text)
+    await message.answer(text, parse_mode="HTML")
+    def admin_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin:stats")],
+            [InlineKeyboardButton(text="👥 Список пользователей", callback_data="admin:users")],
+            [InlineKeyboardButton(text="📝 Последние регистрации", callback_data="admin:last10")],
+            [InlineKeyboardButton(text="📬 Рассылка", callback_data="admin:broadcast")],
+            [InlineKeyboardButton(text="🌗 Статистика по стилям", callback_data="admin:styles")],
+            [InlineKeyboardButton(text="♈ Статистика по знакам", callback_data="admin:signs")],
+        ]
+    )
+@dp.message(Command("admin"))
+async def cmd_admin(message: Message):
+    if message.from_user.id != OWNER_ID:
+        return await message.answer("Команда недоступна.")
     
+    await message.answer(
+        "🛠 <b>Админ-панель</b>\nВыберите действие:",
+        parse_mode="HTML",
+        reply_markup=admin_menu_keyboard()
+    )
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+@dp.callback_query(F.data == "admin:stats")
+async def admin_stats(query: CallbackQuery):
+    users = load_users()
+
+    total = len(users)
+    classic = sum(1 for u in users.values() if u.get("style") == "classic")
+    uncensored = sum(1 for u in users.values() if u.get("style") == "uncensored")
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    received = sum(1 for u in users.values() if u.get("last_sent_date") == today)
+
+    text = (
+        f"📊 <b>Статистика</b>\n\n"
+        f"👥 Всего пользователей: <b>{total}</b>\n"
+        f"🌗 Classic: <b>{classic}</b>\n"
+        f"🔥 Uncensored: <b>{uncensored}</b>\n"
+        f"📬 Получили гороскоп сегодня: <b>{received}</b>\n"
+    )
+
+    await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
+    await query.answer()
+@dp.callback_query(F.data == "admin:users")
+async def admin_users(query: CallbackQuery):
+    users = load_users()
+
+    if not users:
+        await query.answer("Нет пользователей.", show_alert=True)
+        return
+
+    lines = []
+    for uid, data in users.items():
+        zodiac = data.get("zodiac") or "не выбран"
+        style = data.get("style") or "-"
+        lines.append(f"{uid} · {zodiac} · {style}")
+
+    text = "👥 <b>Пользователи:</b>\n\n" + "\n".join(lines)
+
+    await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
+    await query.answer()
+@dp.callback_query(F.data == "admin:last10")
+async def admin_last10(query: CallbackQuery):
+    users = load_users()
+
+    last10 = list(users.items())[-10:]
+    lines = []
+
+    for uid, data in last10:
+        zodiac = data.get("zodiac") or "-"
+        style = data.get("style") or "-"
+        lines.append(f"{uid} · {zodiac} · {style}")
+
+    text = "📝 <b>Последние регистрации:</b>\n\n" + "\n".join(lines)
+
+    await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
+    await query.answer()
+@dp.callback_query(F.data == "admin:signs")
+async def admin_signs(query: CallbackQuery):
+    users = load_users()
+    stats = {}
+
+    for u in users.values():
+        z = u.get("zodiac")
+        if z:
+            stats[z] = stats.get(z, 0) + 1
+
+    lines = "\n".join(f"{ZODIAC_LABELS.get(sign)}: {count}" for sign, count in stats.items())
+    text = "♈ <b>Пользователи по знакам:</b>\n\n" + lines
+
+    await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
+    await query.answer()
+@dp.callback_query(F.data == "admin:styles")
+async def admin_styles(query: CallbackQuery):
+    users = load_users()
+
+    classic = sum(1 for u in users.values() if u.get("style") == "classic")
+    uncensored = sum(1 for u in users.values() if u.get("style") == "uncensored")
+
+    text = (
+        "🌗 <b>Статистика по стилям:</b>\n\n"
+        f"Классический: {classic}\n"
+        f"Без цензуры: {uncensored}"
+    )
+
+    await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
+    await query.answer()
+@dp.callback_query(F.data == "admin:broadcast")
+async def admin_broadcast(query: CallbackQuery):
+    await query.message.answer("Введите текст рассылки:")
+    query.bot.broadcast_mode = True
+    await query.answer()
+@dp.message(F.text)
+async def broadcast_handler(message: Message):
+    if not hasattr(bot, "broadcast_mode"):
+        return
+
+    users = load_users()
+    text = message.text
+
+    count = 0
+    for uid in users.keys():
+        try:
+            await bot.send_message(uid, text)
+            count += 1
+        except:
+            pass
+
+    await message.answer(f"Готово! Отправлено {count} пользователям.")
+    del bot.broadcast_mode
+
+
+# ---------------------------------------------------------
+# Запуск
+# ---------------------------------------------------------
+
+async def main():
+    await dp.start_polling(bot)
+
+
 if __name__ == "__main__":
     asyncio.run(main())
