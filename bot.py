@@ -272,7 +272,7 @@ async def send_today_horoscope(message: Message):
 async def cmd_today(message: Message):
     await send_today_horoscope(message)
 
-@dp.message(F.text == "📜 Гороскоп на сегодня")
+@dp.message(F.text.contains("Гороскоп на сегодня"))
 async def msg_today_button(message: Message):
     await send_today_horoscope(message)
 
