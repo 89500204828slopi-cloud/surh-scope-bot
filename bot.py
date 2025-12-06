@@ -67,9 +67,11 @@ def load_json(path: str) -> Dict[str, Any]:
     except Exception:
         return {}
 
+
 def save_json(path: str, data: Dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 def get_or_create_user(user_id: int) -> Dict[str, Any]:
     users = load_json(USERS_FILE)
@@ -79,11 +81,12 @@ def get_or_create_user(user_id: int) -> Dict[str, Any]:
         users[uid] = {
             "zodiac": None,
             "style": None,
-            "last_sent_date": None
+            "last_sent_date": None,
         }
         save_json(USERS_FILE, users)
 
     return users[uid]
+
 
 def update_user(user_id: int, **fields) -> None:
     users = load_json(USERS_FILE)
@@ -95,6 +98,7 @@ def update_user(user_id: int, **fields) -> None:
     users[uid].update(fields)
     save_json(USERS_FILE, users)
 
+
 def load_horoscopes() -> Dict[str, Any]:
     return load_json(HOROS_FILE)
 
@@ -102,13 +106,14 @@ def load_horoscopes() -> Dict[str, Any]:
 # Клавиатуры
 # ---------------------------------------------------------
 
-def main_menu_keyboard():
+def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🌟 Гороскоп на сегодня", callback_data="today_horoscope")],
-            [InlineKeyboardButton(text="🔧 Админ-панель", callback_data="admin_menu")]
+            [InlineKeyboardButton(text="🔧 Админ-панель", callback_data="admin_menu")],
         ]
     )
+
 
 def zodiac_inline_keyboard() -> InlineKeyboardMarkup:
     rows, row = [], []
@@ -129,6 +134,7 @@ def zodiac_inline_keyboard() -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
+
 def style_inline_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -139,6 +145,7 @@ def style_inline_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
+
 def settings_inline_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -146,6 +153,7 @@ def settings_inline_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🎭 Сменить тип гороскопа", callback_data="settings:change_style")],
         ]
     )
+
 
 def main_reply_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     """
@@ -165,12 +173,13 @@ def main_reply_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
         resize_keyboard=True,
-        one_time_keyboard=False
+        one_time_keyboard=False,
     )
 
 # ---------------------------------------------------------
 # Команда /start
 # ---------------------------------------------------------
+
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     get_or_create_user(message.from_user.id)
@@ -182,7 +191,6 @@ async def cmd_start(message: Message):
 
     await message.answer(txt)
     await message.answer("Выбери свой знак:", reply_markup=zodiac_inline_keyboard())
-
 
 # ---------------------------------------------------------
 # Выбор знака
@@ -200,7 +208,6 @@ async def cb_set_zodiac(query: CallbackQuery):
     )
     await query.answer()
 
-
 # ---------------------------------------------------------
 # Выбор стиля
 # ---------------------------------------------------------
@@ -213,12 +220,12 @@ async def cb_set_style(query: CallbackQuery):
 
     style_label = "классический" if style == "classic" else "без цензуры"
 
+    await query.answer()
+    await query.message.answer(f"Стиль установлен: {style_label}.")
     await query.message.answer(
-        f"Стиль установлен: {style_label}.",
+        "Главное меню:",
         reply_markup=main_reply_keyboard(query.from_user.id),
     )
-    await query.answer()
-
 
 # ---------------------------------------------------------
 # Настройки
@@ -230,7 +237,7 @@ async def cmd_settings(message: Message):
 
     zodiac_txt = ZODIAC_LABELS.get(user.get("zodiac"), "не выбран")
     style_txt = {"classic": "классический", "uncensored": "без цензуры"}.get(
-        user.get("style"), "не выбран"
+        user.get("style"), "не выбран",
     )
 
     text = (
@@ -258,7 +265,6 @@ async def cb_settings_change_style(query: CallbackQuery):
     await query.message.answer("Выбери стиль:", reply_markup=style_inline_keyboard())
     await query.answer()
 
-
 # ---------------------------------------------------------
 # Получение гороскопа из файла
 # ---------------------------------------------------------
@@ -275,7 +281,7 @@ def get_today_horoscope(zodiac: str, style: str, day: date) -> Optional[str]:
           "classic": "текст...",
           "uncensored": "текст..."
         },
-        "taurus": { ... }
+        ...
       }
     }
     """
@@ -286,35 +292,27 @@ def get_today_horoscope(zodiac: str, style: str, day: date) -> Optional[str]:
     key = day.isoformat()
     day_block = data.get(key)
     if not day_block:
-        # на всякий случай попробуем ещё ключ без нулей или другие варианты,
-        # если ты потом захочешь доработать формат
         return None
 
     zodiac_block = day_block.get(zodiac)
     if not zodiac_block:
         return None
 
-    # Если храним по стилям
     if isinstance(zodiac_block, dict):
-        # строго по стилю
         text = zodiac_block.get(style)
         if text:
             return text
-        # fallback — просто "text" или любой один общий
         if "text" in zodiac_block:
             return zodiac_block["text"]
-        # на всякий случай возьмём первый попавшийся
         for v in zodiac_block.values():
             if isinstance(v, str) and v.strip():
                 return v
         return None
 
-    # Если храним сразу строкой
     if isinstance(zodiac_block, str):
         return zodiac_block
 
     return None
-
 
 # ---------------------------------------------------------
 # Гороскоп на сегодня
@@ -353,7 +351,6 @@ async def cmd_today(message: Message):
 
 @dp.message(F.text.contains("Гороскоп на сегодня"))
 async def msg_today_button(message: Message):
-    print("DEBUG: reply button pressed")
     await send_today_horoscope(message)
 
 
@@ -379,12 +376,8 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        return {}
-    with open(USERS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
+def load_users() -> Dict[str, Any]:
+    return load_json(USERS_FILE)
 
 # ---------------------------------------------------------
 # Кнопка Админ-панель в меню
@@ -398,9 +391,8 @@ async def open_admin_menu(message: Message):
     await message.answer(
         "🛠 <b>Админ-панель</b>\nВыберите действие:",
         parse_mode="HTML",
-        reply_markup=admin_menu_keyboard()
+        reply_markup=admin_menu_keyboard(),
     )
-
 
 # ---------------------------------------------------------
 # Статистика для админа
@@ -431,7 +423,6 @@ async def admin_stats(query: CallbackQuery):
     await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
     await query.answer()
 
-
 # ---------------------------------------------------------
 # Список всех пользователей
 # ---------------------------------------------------------
@@ -447,7 +438,7 @@ async def admin_users(query: CallbackQuery):
         return await query.message.edit_text(
             "Пользователей пока нет.",
             reply_markup=admin_menu_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
     lines = []
@@ -460,7 +451,6 @@ async def admin_users(query: CallbackQuery):
 
     await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
     await query.answer()
-
 
 # ---------------------------------------------------------
 # Последние 10 регистраций
@@ -485,7 +475,6 @@ async def admin_last10(query: CallbackQuery):
     await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
     await query.answer()
 
-
 # ---------------------------------------------------------
 # Статистика по знакам зодиака
 # ---------------------------------------------------------
@@ -496,7 +485,7 @@ async def admin_signs(query: CallbackQuery):
         return await query.answer("Нет доступа.", show_alert=True)
 
     users = load_users()
-    stats = {}
+    stats: Dict[str, int] = {}
 
     for u in users.values():
         sign = u.get("zodiac")
@@ -512,7 +501,6 @@ async def admin_signs(query: CallbackQuery):
 
     await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
     await query.answer()
-
 
 # ---------------------------------------------------------
 # Статистика по стилям
@@ -537,7 +525,6 @@ async def admin_styles(query: CallbackQuery):
     await query.message.edit_text(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
     await query.answer()
 
-
 # ---------------------------------------------------------
 # Рассылка
 # ---------------------------------------------------------
@@ -548,7 +535,7 @@ async def admin_broadcast(query: CallbackQuery):
         return await query.answer("Нет доступа.", show_alert=True)
 
     await query.message.answer("Введите текст рассылки:")
-    bot.broadcast_mode = True  # включаем режим ожидания текста
+    bot.broadcast_mode = True
     await query.answer()
 
 
@@ -566,11 +553,11 @@ async def broadcast_handler(message: Message):
         try:
             await bot.send_message(uid, text)
             count += 1
-        except:
+        except Exception:
             pass
 
     await message.answer(f"Готово! Отправлено {count} пользователям.")
-    del bot.broadcast_mode
+    delattr(bot, "broadcast_mode")
 
 # ---------------------------------------------------------
 # /stats — быстрая статистика для админа (без панели)
@@ -578,7 +565,6 @@ async def broadcast_handler(message: Message):
 
 @dp.message(Command("stats"))
 async def stats_cmd(message: Message):
-
     if message.from_user.id != OWNER_ID:
         return await message.answer("⛔ Доступ запрещён.")
 
@@ -591,7 +577,7 @@ async def stats_cmd(message: Message):
     today = datetime.now().strftime("%Y-%m-%d")
     received = sum(1 for u in users.values() if u.get("last_sent_date") == today)
 
-    sign_stats = {}
+    sign_stats: Dict[str, int] = {}
     for u in users.values():
         sign = u.get("zodiac")
         if sign:
@@ -611,7 +597,6 @@ async def stats_cmd(message: Message):
     )
 
     await message.answer(text, parse_mode="HTML")
-
 
 # ---------------------------------------------------------
 # Запуск бота
