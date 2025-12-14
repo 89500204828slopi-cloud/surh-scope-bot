@@ -220,7 +220,7 @@ async def cb_set_style(query: CallbackQuery):
     await query.answer()
 
     # СРАЗУ отправляем гороскоп
-    await send_today_horoscope(query.message)
+    await send_today_horoscope(query.message, user_id=query.from_user.id)
 
     # И показываем меню
     await query.message.answer(
@@ -319,8 +319,8 @@ def get_today_horoscope(zodiac: str, style: str, day: date) -> Optional[str]:
 # Гороскоп на сегодня
 # ---------------------------------------------------------
 
-async def send_today_horoscope(message: Message):
-    user = get_or_create_user(message.from_user.id)
+async def send_today_horoscope(message: Message, user_id: int):
+    user = get_or_create_user(user_id)
 
     zodiac = user.get("zodiac")
     style = user.get("style")
@@ -340,24 +340,24 @@ async def send_today_horoscope(message: Message):
         f"{text}"
     )
 
-    update_user(message.from_user.id, last_sent_date=today.isoformat())
+    update_user(user_id, last_sent_date=today.isoformat())
 
     await message.answer(reply)
 
 
 @dp.message(Command("today"))
 async def cmd_today(message: Message):
-    await send_today_horoscope(message)
+    await send_today_horoscope(message, user_id=message.from_user.id)
 
 
 @dp.message(F.text.contains("Гороскоп на сегодня"))
 async def msg_today_button(message: Message):
-    await send_today_horoscope(message)
+    await send_today_horoscope(message, user_id=message.from_user.id)
 
 
 @dp.callback_query(F.data == "today_horoscope")
 async def cb_today_horoscope(query: CallbackQuery):
-    await send_today_horoscope(query.message)
+    await send_today_horoscope(query.message, user_id=query.from_user.id)
     await query.answer()
 
 # ---------------------------------------------------------
