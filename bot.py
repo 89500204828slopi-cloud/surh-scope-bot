@@ -215,13 +215,14 @@ async def cb_set_zodiac(query: CallbackQuery):
 @dp.callback_query(F.data.startswith("set_style:"))
 async def cb_set_style(query: CallbackQuery):
     style = query.data.split(":", 1)[1]
-
     update_user(query.from_user.id, style=style)
 
-    style_label = "классический" if style == "classic" else "без цензуры"
-
     await query.answer()
-    await query.message.answer(f"Стиль установлен: {style_label}.")
+
+    # СРАЗУ отправляем гороскоп
+    await send_today_horoscope(query.message)
+
+    # И показываем меню
     await query.message.answer(
         "Главное меню:",
         reply_markup=main_reply_keyboard(query.from_user.id),
